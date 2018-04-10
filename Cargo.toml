@@ -1,0 +1,10 @@
+[package]
+name = "nonblock"
+version = "0.1.0"
+authors = ["sirkibsirkib <christopher.esterhuyse@gmail.com>"]
+
+[dependencies]
+serde = "1.0.27"
+serde_derive = "1.0.27"
+bincode = "1.0.0"
+byteorder = "1.2.2"
