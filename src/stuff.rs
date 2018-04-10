@@ -13,20 +13,15 @@ use byteorder::{
 use ::bincode;
 
 use ::std::{
+	io,
 	fmt::Debug,
 	convert::From,
 	marker::PhantomData,
-	io,
 	io::prelude::*,
-	// time,
-	// io::Error,
-	net::{
-		// TcpListener,
-		TcpStream,
-	},
-	// thread,
+	net::TcpStream,
 };
 
+const LEN_BYTES: usize = 4; 
 pub trait Message: Serialize + DeserializeOwned + Sized + Debug {}
 
 #[derive(Debug)]
@@ -52,7 +47,6 @@ impl From<io::Error> for EE {
 	}
 }
 
-const LEN_BYTES: usize = 4; 
 
 impl<M> Endpoint<M>
 where M: Message {
@@ -114,17 +108,11 @@ where M: Message {
 	}
 
 	pub fn try_recv(&mut self) -> Result<M, EE> {
-		// assert_eq!(
-		// 	self.payload_bytes.is_none(),
-		// 	self.buf_occupancy < LEN_BYTES,
-		// );
 		if self.payload_bytes.is_none() {
-			// try to get the len bytes
 			self.ensure_buf_capacity(LEN_BYTES);
 			self.buf_occupancy +=
 				self.stream.read(&mut self.buf[self.buf_occupancy..LEN_BYTES])?;
 			if self.buf_occupancy == 4 {
-				//I now know the payload len
 				self.payload_bytes = Some(
 					(&self.buf[0..LEN_BYTES]).read_u32::<LittleEndian>()
 					.expect("naimen")

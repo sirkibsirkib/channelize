@@ -2,15 +2,21 @@
 use super::{
 	Endpoint,
 	Message,
-	// EE,
 };
+
+const DEBUG_PRINTING: bool = false;
+
+macro_rules! dprintln {
+	() => ();
+	($fmt:expr) => (if DEBUG_PRINTING {dprintln!(expr)});
+	($fmt:expr, $($arg:tt)*) => (if DEBUG_PRINTING {
+		print!(concat!($fmt, "\n"), $($arg)*)
+	});
+}
 
 // import stdlib stuff
 use ::std::{
 	sync::Arc,
-	// io,
-	// io::prelude::*,
-	// time,
 	io::{
 		Error,
 		ErrorKind,
@@ -21,12 +27,6 @@ use ::std::{
 	},
 	thread,
 };
-
-// use serde::{
-// 	Serialize,
-// 	Deserialize,
-// 	de::DeserializeOwned,
-// };
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 enum TestMsg {
@@ -50,33 +50,48 @@ fn server_only_as() {
 	);
 }
 
-// #[test]
-// fn client_only_as() {
-// 	use self::TestMsg::*;
-// 	simple_test(
-// 		"client_only_as",
-// 		TestExchange {
-// 			server_sends: vec![],
-// 			client_sends: vec![A,A,A,A],
-// 		},
-// 	);
-// }
+#[test]
+fn client_only_as() {
+	use self::TestMsg::*;
+	simple_test(
+		"server_only_as",
+		TestExchange {
+			server_sends: vec![],
+			client_sends: vec![A,A,A],
+		},
+		1,
+	);
+}
 
-// #[test]
-// fn both_as() {
-// 	use self::TestMsg::*;
-// 	simple_test(
-// 		"both_as",
-// 		TestExchange {
-// 			server_sends: vec![A,A,A,A,A,A],
-// 			client_sends: vec![A,A,A,A],
-// 		},
-// 	);
-// }
+#[test]
+fn both_as() {
+	use self::TestMsg::*;
+	simple_test(
+		"server_only_as",
+		TestExchange {
+			server_sends: vec![A,A],
+			client_sends: vec![A,A,A],
+		},
+		1,
+	);
+}
+
+#[test]
+fn two_clients() {
+	use self::TestMsg::*;
+	simple_test(
+		"server_only_as",
+		TestExchange {
+			server_sends: vec![A,A],
+			client_sends: vec![A,A,A],
+		},
+		2,
+	);
+}
 
 fn simple_test(test_name: &'static str, te: TestExchange, num_clients: u32) {
 	let (listener, addr) = bind_to_a_port().expect("fale");
-	println!("bound to {:?}", (&listener, &addr));
+	dprintln!("bound to {:?}", (&listener, &addr));
 	let te = Arc::new(te);
 	let mut handles = vec![];
 	for client_id in 0..num_clients {
@@ -168,15 +183,15 @@ fn perform_exchange(
 	} else {
 		(&te.server_sends, &te.client_sends)
 	};
-	println!("{} exchanging. expect {:?}, will send {:?}", name, &incoming, &outgoing);
+	dprintln!("{} exchanging. expect {:?}, will send {:?}", name, &incoming, &outgoing);
 	let (inlen, outlen) = (incoming.len(), outgoing.len());
 	for (i,e) in outgoing.iter().enumerate() {
 		endpoint.send(e).is_ok();
-		println!("{} sent   [{}/{}]: {:?}", name, i+1, outlen, e);
+		dprintln!("{} sent   [{}/{}]: {:?}", name, i+1, outlen, e);
 	}
 	for (i,e) in incoming.iter().enumerate() {
-		println!("{} recv'd [{}/{}]: {:?}", name, i+1, inlen, e);
+		dprintln!("{} recv'd [{}/{}]: {:?}", name, i+1, inlen, e);
 		assert_eq!(e, &endpoint.recv().expect("danky"));
 	}
-	println!(">> finished exchange for {}", name);
+	dprintln!(">> finished exchange for {}", name);
 }
