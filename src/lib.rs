@@ -7,8 +7,9 @@ mod stuff;
 
 pub use stuff::{
 	Message,
+	Stream,
 	Endpoint,
-	EE,
+	RecvError,
 };
 
 #[cfg(test)]

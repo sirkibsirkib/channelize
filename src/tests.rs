@@ -1,11 +1,5 @@
-
-use super::{
-	Endpoint,
-	Message,
-};
-
+// for convenience when testing
 const DEBUG_PRINTING: bool = false;
-
 macro_rules! dprintln {
 	() => ();
 	($fmt:expr) => (if DEBUG_PRINTING {dprintln!(expr)});
@@ -16,6 +10,7 @@ macro_rules! dprintln {
 
 // import stdlib stuff
 use ::std::{
+	collections::HashSet,
 	sync::Arc,
 	io::{
 		Error,
@@ -28,6 +23,16 @@ use ::std::{
 	thread,
 };
 
+
+// ----------------------------
+// useful example code snippets
+// ----------------------------
+use super::{
+	Endpoint,
+	Message,
+};
+
+// define the structure we want to parse
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 enum TestMsg {
 	A,
@@ -36,6 +41,63 @@ enum TestMsg {
 }
 impl Message for TestMsg {}
 
+// this server expects TestMsg structs and bounces them back
+fn echo_server(listener: TcpListener) -> Result<(), Error> {
+	for stream in listener.incoming() {
+		let mut endpt: Endpoint<_, TestMsg> = Endpoint::new(stream?);
+		thread::spawn(move || { // move endpt inside closure
+			while let Ok(m) = endpt.recv() {
+				endpt.send(&m);
+			}
+		});
+	}
+	Ok(())
+}
+
+#[test]
+fn example() {
+	let (listener, addr) = bind_to_a_port().expect("oh no");
+	use self::TestMsg::*;
+	let h = thread::spawn(move || {
+		//server
+		let (stream, _addr) = listener.accept().expect("accept failed");
+		let mut se: Endpoint<_, TestMsg> = Endpoint::new(stream);
+		se.send(&A).is_ok();
+		se.send(&C(vec![1,2,3])).is_ok();
+		assert_eq!(se.recv().unwrap(), B(42));
+		assert_eq!(se.recv().unwrap(), B(22));
+	});
+	//client
+	let stream = TcpStream::connect(addr).expect("connect failed");
+	let mut cl: Endpoint<_, TestMsg> = Endpoint::new(stream);
+	let msgs = vec![B(42), B(22)];
+	let (num_sent, res) = cl.send_all(msgs.iter());
+	assert_eq!(num_sent, 2);
+	res.is_ok();
+	assert_eq!(cl.recv().unwrap(), A);
+	assert_eq!(cl.recv().unwrap(), C(vec![1,2,3]));
+	h.join().is_ok();
+}
+
+
+struct TestMsg2 {
+	x: String,
+	y: HashSet<char>,
+}
+
+#[test]
+fn different_structs() {
+	let (listener, addr) = bind_to_a_port().expect("bind fail");
+	thread::spawn(move || {
+		let stream = listener.accept().unwrap(); // just one client
+		let mut endpt: Endpoint<_, TestMsg> = Endpoint::new(stream);
+		while let Ok(m) = endpt.recv() {
+			endpt.send(&m);
+		}
+	});
+}
+
+// ----------------------------------------
 
 #[test]
 fn a1_server() {
@@ -48,6 +110,23 @@ fn a1_server() {
 		},
 		1,
 	);
+}
+
+#[test]
+fn echoes() {
+	let (listener, addr) = bind_to_a_port().expect("bind fail");
+	thread::spawn(move || {
+		echo_server(listener);
+	});
+
+	use self::TestMsg::*;
+	let messages = vec![A, B(1), B(4), C(vec![1,2,3]), A, C(vec![0,0]), A, A];
+	let t = TcpStream::connect(addr).expect("connect fail");
+	let mut endpt: Endpoint<_, TestMsg> = Endpoint::new(t);
+	for m in messages.iter() {
+		endpt.send(m);
+		assert_eq!(&endpt.recv().unwrap(), m);
+	}
 }
 
 #[test]
@@ -241,7 +320,7 @@ fn server(test_name: &str, listener: TcpListener, te: Te, num_clients: u32) -> R
 	let mut handles = vec![];
  	for i in 1..(num_clients+1) {
  		let (stream, _) = listener.accept().expect("maymay");
-		let endpoint: Endpoint<TestMsg> = Endpoint::new(stream);
+		let endpoint: Endpoint<TcpStream, TestMsg> = Endpoint::new(stream);
 		let te2 = te.clone();
 		let name2 = format!("{} (server {}/{})", test_name, i, num_clients);
 		let h = thread::spawn(move || {
@@ -265,7 +344,7 @@ fn server(test_name: &str, listener: TcpListener, te: Te, num_clients: u32) -> R
 
 fn client(name: &str, addr: SocketAddr, te: Te) -> Result<(), Error> {
 	let stream = TcpStream::connect(addr)?;
-	let endpoint: Endpoint<TestMsg> = Endpoint::new(stream);
+	let endpoint: Endpoint<TcpStream, TestMsg> = Endpoint::new(stream);
     perform_exchange(
     	name,
     	endpoint,
@@ -278,7 +357,7 @@ fn client(name: &str, addr: SocketAddr, te: Te) -> Result<(), Error> {
 
 fn perform_exchange(
 	name: &str,
-	mut endpoint: Endpoint<TestMsg>,
+	mut endpoint: Endpoint<TcpStream, TestMsg>,
 	te: Te,
 	is_server: bool,
 ) {
